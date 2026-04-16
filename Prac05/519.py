@@ -1,3 +1,6 @@
 import re
-a = input()
-x = re.compile(r"\b\w{3}\b")
+
+text = input()
+pattern = re.compile(r'\b\w+\b')
+words = pattern.findall(text)
+print(len(words))

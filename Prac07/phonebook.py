@@ -54,7 +54,7 @@ def update_contact():
     conn = connect()
     cur = conn.cursor()
     name = input("Enter name to update: ")
-    new_name = input("New name (leave empty to skip): ")
+    new_name = input("New name (leave empty to skip): ") 
     new_phone = input("New phone (leave empty to skip): ")
     if new_name:
         cur.execute(
@@ -72,32 +72,7 @@ def update_contact():
     print("Contact updated")
 
 # поиск контактов
-def query_contacts():
-    conn = connect()
-    cur = conn.cursor()
-    print("1 - Show all")
-    print("2 - Search by name")
-    print("3 - Search by phone prefix")
-    choice = input("Choose: ")
-    if choice == "1":
-        cur.execute("SELECT * FROM phonebook")
-    elif choice == "2":
-        name = input("Enter name: ")
-        cur.execute(
-            "SELECT * FROM phonebook WHERE name ILIKE %s",
-            ('%' + name + '%',)
-        )
-    elif choice == "3":
-        prefix = input("Enter prefix: ")
-        cur.execute(
-            "SELECT * FROM phonebook WHERE phone LIKE %s",
-            (prefix + "%",)
-        )
-    rows = cur.fetchall()
-    for row in rows:
-        print(row)
-    cur.close()
-    conn.close()
+
 
 # удаление контакта
 def delete_contact():
