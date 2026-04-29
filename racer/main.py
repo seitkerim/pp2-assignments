@@ -1,293 +1,197 @@
 import pygame
 import sys
 import random
+import os
+from pygame.locals import *
 
 pygame.init()
 
-# ── Настройки окна ────────────────────────────────────────────────────────────
-WIDTH, HEIGHT = 500, 700
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Racer")
-clock = pygame.time.Clock()
+# ── ПУТИ К ФАЙЛАМ ─────────────────────────────
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+IMAGES_DIR = os.path.join(BASE_DIR, "images")
+
+# ── FPS (скорость игры) ───────────────────────
 FPS = 60
+FramePerSec = pygame.time.Clock()
 
-# ── Цвета ─────────────────────────────────────────────────────────────────────
-BLACK      = (  0,   0,   0)
-WHITE      = (255, 255, 255)
-GRAY       = (100, 100, 100)
-DARK_GRAY  = ( 50,  50,  50)
-RED        = (220,  50,  50)
-BLUE       = ( 50, 100, 220)
-YELLOW     = (255, 220,   0)
-GREEN      = ( 50, 200,  50)
-ROAD_CLR   = ( 60,  60,  60)
-LINE_CLR   = (200, 200,   0)
-GRASS_CLR  = ( 34, 139,  34)
+# ── РАЗМЕР ОКНА ───────────────────────────────
+SCREEN_WIDTH = 700
+SCREEN_HEIGHT = 700
 
-font_big   = pygame.font.SysFont("Arial", 42, bold=True)
-font_med   = pygame.font.SysFont("Arial", 24, bold=True)
-font_small = pygame.font.SysFont("Arial", 18)
+# ── ЦВЕТА ──────────────────────────────────────
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+GRAY = (50, 50, 50)
 
-# ── Дорога ────────────────────────────────────────────────────────────────────
-ROAD_LEFT  = 80     # левый край дороги
-ROAD_RIGHT = 420    # правый край дороги
-ROAD_W     = ROAD_RIGHT - ROAD_LEFT
+# ── СОЗДАНИЕ ОКНА ─────────────────────────────
+DISPLAYSURF = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Racer")
 
-# Полосы дороги (3 полосы)
-LANES = [
-    ROAD_LEFT + ROAD_W // 6,           # левая полоса
-    ROAD_LEFT + ROAD_W // 2,           # средняя полоса
-    ROAD_LEFT + ROAD_W * 5 // 6,       # правая полоса
-]
+# ── ШРИФТ ДЛЯ ТЕКСТА ──────────────────────────
+font = pygame.font.SysFont("Verdana", 30)
 
-# ── Класс: машина игрока ───────────────────────────────────────────────────────
-class PlayerCar:
+# ── ИГРОВЫЕ ПЕРЕМЕННЫЕ ────────────────────────
+score = 0
+coins_collected = 0
+speed = 5
+
+
+# ───────────────────────────────────────────────
+# ENEMY (ВРАГ) - движение вниз + перерождение
+# ───────────────────────────────────────────────
+class Enemy(pygame.sprite.Sprite):
+
     def __init__(self):
-        self.w = 50
-        self.h = 80
-        self.x = WIDTH // 2 - self.w // 2
-        self.y = HEIGHT - 120
-        self.speed = 5         # скорость движения влево/вправо
+        super().__init__()
 
-    def draw(self, screen):
-        # Кузов
-        pygame.draw.rect(screen, BLUE, (self.x, self.y, self.w, self.h), border_radius=8)
-        # Лобовое стекло
-        pygame.draw.rect(screen, (150, 200, 255), (self.x + 8, self.y + 10, self.w - 16, 20), border_radius=4)
-        # Заднее стекло
-        pygame.draw.rect(screen, (150, 200, 255), (self.x + 8, self.y + self.h - 30, self.w - 16, 15), border_radius=4)
-        # Колёса
-        pygame.draw.rect(screen, BLACK, (self.x - 8,       self.y + 10, 10, 20), border_radius=3)
-        pygame.draw.rect(screen, BLACK, (self.x + self.w - 2, self.y + 10, 10, 20), border_radius=3)
-        pygame.draw.rect(screen, BLACK, (self.x - 8,       self.y + self.h - 30, 10, 20), border_radius=3)
-        pygame.draw.rect(screen, BLACK, (self.x + self.w - 2, self.y + self.h - 30, 10, 20), border_radius=3)
+        # загрузка картинки врага
+        img = pygame.image.load(os.path.join(IMAGES_DIR, "enemy.png"))
+        self.image = pygame.transform.smoothscale(img, (90, 140))
 
-    def get_rect(self):
-        return pygame.Rect(self.x, self.y, self.w, self.h)
+        # прямоугольник (позиция + столкновения)
+        self.rect = self.image.get_rect()
 
-    def move(self, keys):
-        if keys[pygame.K_LEFT]  and self.x > ROAD_LEFT + 5:
-            self.x -= self.speed
-        if keys[pygame.K_RIGHT] and self.x + self.w < ROAD_RIGHT - 5:
-            self.x += self.speed
+        self.reset()
+
+    # ── СБРОС ВРАГА ВВЕРХ ЭКРАНА ──
+    def reset(self):
+        self.rect.x = random.randint(0, SCREEN_WIDTH - self.rect.width)
+        self.rect.y = -150
+
+    # ── ДВИЖЕНИЕ ВРАГА ВНИЗ ──
+    def move(self):
+        global score, speed
+
+        self.rect.move_ip(0, speed)
+
+        # если враг ушёл за экран
+        if self.rect.top > SCREEN_HEIGHT:
+            score += 1      # +1 очко
+            speed += 0.2    # увеличение скорости
+            self.reset()
+
+    # ── ОТРИСОВКА ВРАГА ──
+    def draw(self, surface):
+        surface.blit(self.image, self.rect)
 
 
-# ── Класс: машина-противник ───────────────────────────────────────────────────
-class EnemyCar:
-    COLORS = [RED, (220, 100, 0), (180, 0, 180), (0, 180, 180)]
+# ───────────────────────────────────────────────
+# PLAYER (ИГРОК) - управление клавиатурой
+# ───────────────────────────────────────────────
+class Player(pygame.sprite.Sprite):
 
-    def __init__(self, speed):
-        self.w = 50
-        self.h = 80
-        lane = random.choice(LANES)
-        self.x = lane - self.w // 2
-        self.y = -self.h                    # начинает выше экрана
-        self.speed = speed
-        self.color = random.choice(self.COLORS)
+    def __init__(self):
+        super().__init__()
 
-    def draw(self, screen):
-        pygame.draw.rect(screen, self.color, (self.x, self.y, self.w, self.h), border_radius=8)
-        pygame.draw.rect(screen, (255, 200, 150), (self.x + 8, self.y + 10, self.w - 16, 20), border_radius=4)
-        pygame.draw.rect(screen, (255, 200, 150), (self.x + 8, self.y + self.h - 30, self.w - 16, 15), border_radius=4)
-        pygame.draw.rect(screen, BLACK, (self.x - 8,       self.y + 10, 10, 20), border_radius=3)
-        pygame.draw.rect(screen, BLACK, (self.x + self.w - 2, self.y + 10, 10, 20), border_radius=3)
-        pygame.draw.rect(screen, BLACK, (self.x - 8,       self.y + self.h - 30, 10, 20), border_radius=3)
-        pygame.draw.rect(screen, BLACK, (self.x + self.w - 2, self.y + self.h - 30, 10, 20), border_radius=3)
+        img = pygame.image.load(os.path.join(IMAGES_DIR, "car.png"))
+        self.image = pygame.transform.smoothscale(img, (90, 140))
 
+        self.rect = self.image.get_rect()
+        self.rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT - 120)
+
+    # ── УПРАВЛЕНИЕ (ЛЕВО / ПРАВО) ──
     def update(self):
-        self.y += self.speed   # едет вниз
+        pressed_keys = pygame.key.get_pressed()
 
-    def get_rect(self):
-        return pygame.Rect(self.x, self.y, self.w, self.h)
+        if pressed_keys[K_LEFT] and self.rect.left > 0:
+            self.rect.move_ip(-7, 0)
 
-    def is_off_screen(self):
-        return self.y > HEIGHT
+        if pressed_keys[K_RIGHT] and self.rect.right < SCREEN_WIDTH:
+            self.rect.move_ip(7, 0)
 
-
-# ── Класс: монета ─────────────────────────────────────────────────────────────
-class Coin:
-    def __init__(self, speed):
-        lane = random.choice(LANES)
-        self.x = lane              # центр монеты
-        self.y = -20
-        self.r = 14                # радиус
-        self.speed = speed
-
-    def draw(self, screen):
-        pygame.draw.circle(screen, YELLOW, (self.x, self.y), self.r)
-        pygame.draw.circle(screen, (200, 160, 0), (self.x, self.y), self.r, 2)
-        # Знак $ внутри
-        txt = font_small.render("$", True, (150, 100, 0))
-        screen.blit(txt, (self.x - txt.get_width() // 2, self.y - txt.get_height() // 2))
-
-    def update(self):
-        self.y += self.speed
-
-    def get_rect(self):
-        return pygame.Rect(self.x - self.r, self.y - self.r, self.r * 2, self.r * 2)
-
-    def is_off_screen(self):
-        return self.y > HEIGHT
+    # ── ОТРИСОВКА ИГРОКА ──
+    def draw(self, surface):
+        surface.blit(self.image, self.rect)
 
 
-# ── Рисование дороги ──────────────────────────────────────────────────────────
-road_line_y = 0   # анимация дорожной разметки (глобальная)
+# ───────────────────────────────────────────────
+# COIN (МОНЕТА) - сбор бонусов
+# ───────────────────────────────────────────────
+class Coin(pygame.sprite.Sprite):
 
-def draw_road():
-    global road_line_y
+    def __init__(self):
+        super().__init__()
 
-    # Трава по бокам
-    screen.fill(GRASS_CLR)
+        img = pygame.image.load(os.path.join(IMAGES_DIR, "coin.png"))
+        self.image = pygame.transform.smoothscale(img, (40, 40))
 
-    # Дорога
-    pygame.draw.rect(screen, ROAD_CLR, (ROAD_LEFT, 0, ROAD_W, HEIGHT))
+        self.rect = self.image.get_rect()
+        self.reset()
 
-    # Края дороги (белые полосы)
-    pygame.draw.rect(screen, WHITE, (ROAD_LEFT, 0, 6, HEIGHT))
-    pygame.draw.rect(screen, WHITE, (ROAD_RIGHT - 6, 0, 6, HEIGHT))
+    # ── СБРОС МОНЕТЫ ──
+    def reset(self):
+        self.rect.x = random.randint(0, SCREEN_WIDTH - self.rect.width)
+        self.rect.y = random.randint(-300, -50)
 
-    # Разделительные пунктирные линии (анимированные)
-    road_line_y = (road_line_y + 5) % 80    # двигаются вниз
-    for lane_x in [ROAD_LEFT + ROAD_W // 3, ROAD_LEFT + ROAD_W * 2 // 3]:
-        y = -80 + road_line_y
-        while y < HEIGHT:
-            pygame.draw.rect(screen, LINE_CLR, (lane_x - 3, y, 6, 40))
-            y += 80
+    # ── ДВИЖЕНИЕ МОНЕТЫ ВНИЗ ──
+    def move(self):
+        self.rect.move_ip(0, speed)
 
+        if self.rect.top > SCREEN_HEIGHT:
+            self.reset()
 
-# ── Экраны ────────────────────────────────────────────────────────────────────
-def show_start_screen():
-    screen.fill(BLACK)
-    t1 = font_big.render("RACER", True, YELLOW)
-    t2 = font_med.render("Press SPACE to start", True, WHITE)
-    t3 = font_small.render("Use LEFT / RIGHT arrows to drive", True, GRAY)
-    screen.blit(t1, (WIDTH // 2 - t1.get_width() // 2, 200))
-    screen.blit(t2, (WIDTH // 2 - t2.get_width() // 2, 300))
-    screen.blit(t3, (WIDTH // 2 - t3.get_width() // 2, 350))
-    pygame.display.flip()
-    wait_for_key(pygame.K_SPACE)
+    # ── ОТРИСОВКА МОНЕТЫ ──
+    def draw(self, surface):
+        surface.blit(self.image, self.rect)
 
 
-def show_game_over(score, coins):
-    screen.fill(BLACK)
-    t1 = font_big.render("GAME OVER", True, RED)
-    t2 = font_med.render(f"Score: {score}   Coins: {coins}", True, WHITE)
-    t3 = font_small.render("Press SPACE to play again", True, GRAY)
-    screen.blit(t1, (WIDTH // 2 - t1.get_width() // 2, 220))
-    screen.blit(t2, (WIDTH // 2 - t2.get_width() // 2, 300))
-    screen.blit(t3, (WIDTH // 2 - t3.get_width() // 2, 360))
-    pygame.display.flip()
-    wait_for_key(pygame.K_SPACE)
+# ───────────────────────────────────────────────
+# СОЗДАНИЕ ОБЪЕКТОВ ИГРЫ
+# ───────────────────────────────────────────────
+P1 = Player()
+E1 = Enemy()
+C1 = Coin()
 
 
-def wait_for_key(key):
-    """Ждёт нажатия конкретной клавиши."""
-    while True:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            if event.type == pygame.KEYDOWN and event.key == key:
-                return
-
-
-# ── Основная игра ─────────────────────────────────────────────────────────────
-def run_game():
-    player = PlayerCar()
-    enemies = []
-    coins   = []
-
-    score      = 0       # очки (за время выживания)
-    coin_count = 0       # собранные монеты
-
-    enemy_speed  = 5     # начальная скорость врагов
-    enemy_timer  = 0     # таймер появления врагов
-    enemy_delay  = 90    # каждые 90 кадров новый враг
-
-    coin_timer   = 0     # таймер появления монет
-    coin_delay   = 120   # каждые 120 кадров новая монета
-
-    running = True
-    while running:
-
-        clock.tick(FPS)
-
-        # ── События ───────────────────────────────────────────────────────────
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-
-        # ── Управление игроком ────────────────────────────────────────────────
-        keys = pygame.key.get_pressed()
-        player.move(keys)
-
-        # ── Счёт растёт со временем ───────────────────────────────────────────
-        score += 1
-
-        # ── Постепенно увеличиваем скорость ───────────────────────────────────
-        enemy_speed = 5 + score // 300   # каждые 5 секунд +1 к скорости
-
-        # ── Спавн врагов ──────────────────────────────────────────────────────
-        enemy_timer += 1
-        if enemy_timer >= enemy_delay:
-            enemies.append(EnemyCar(enemy_speed))
-            enemy_timer = 0
-            # Со временем враги появляются чаще
-            enemy_delay = max(40, 90 - score // 200)
-
-        # ── Спавн монет ───────────────────────────────────────────────────────
-        coin_timer += 1
-        if coin_timer >= coin_delay:
-            coins.append(Coin(enemy_speed))
-            coin_timer = 0
-
-        # ── Обновляем врагов ──────────────────────────────────────────────────
-        for enemy in enemies:
-            enemy.update()
-        enemies = [e for e in enemies if not e.is_off_screen()]
-
-        # ── Обновляем монеты ──────────────────────────────────────────────────
-        for coin in coins:
-            coin.update()
-        coins = [c for c in coins if not c.is_off_screen()]
-
-        # ── Проверка столкновения с врагом ────────────────────────────────────
-        for enemy in enemies:
-            if player.get_rect().colliderect(enemy.get_rect()):
-                return score, coin_count   # конец игры
-
-        # ── Проверка сбора монет ──────────────────────────────────────────────
-        collected = []
-        for coin in coins:
-            if player.get_rect().colliderect(coin.get_rect()):
-                coin_count += 1
-                collected.append(coin)
-        coins = [c for c in coins if c not in collected]
-
-        # ── Рисуем ────────────────────────────────────────────────────────────
-        draw_road()
-
-        for enemy in enemies:
-            enemy.draw(screen)
-
-        for coin in coins:
-            coin.draw(screen)
-
-        player.draw(screen)
-
-        # Счёт в правом верхнем углу
-        score_txt = font_med.render(f"Score: {score // 10}", True, WHITE)
-        coins_txt = font_med.render(f"Coins: {coin_count}", True, YELLOW)
-        screen.blit(score_txt, (10, 10))
-        screen.blit(coins_txt, (WIDTH - coins_txt.get_width() - 10, 10))
-
-        pygame.display.flip()
-
-
-# ── Запуск ────────────────────────────────────────────────────────────────────
-show_start_screen()
-
+# ───────────────────────────────────────────────
+# ГЛАВНЫЙ ИГРОВОЙ ЦИКЛ
+# ───────────────────────────────────────────────
 while True:
-    final_score, final_coins = run_game()
-    show_game_over(final_score // 10, final_coins)
+
+    # ── ОБРАБОТКА СОБЫТИЙ (клавиатура / выход)
+    for event in pygame.event.get():
+
+        if event.type == QUIT:
+            pygame.quit()
+            sys.exit()
+
+    # ── ОБНОВЛЕНИЕ ИГРОВОЙ ЛОГИКИ
+    P1.update()   # движение игрока
+    E1.move()     # движение врага
+    C1.move()     # движение монеты
+
+    # ── СТОЛКНОВЕНИЕ С ВРАГОМ (GAME OVER)
+    if pygame.sprite.collide_rect(P1, E1):
+        text = font.render("GAME OVER", True, BLACK)
+        rect = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+
+        DISPLAYSURF.blit(text, rect)
+        pygame.display.update()
+
+        pygame.time.delay(2000)
+
+        pygame.quit()
+        sys.exit()
+
+    # ── СТОЛКНОВЕНИЕ С МОНЕТОЙ (СБОР)
+    if pygame.sprite.collide_rect(P1, C1):
+        coins_collected += 1
+        C1.reset()
+
+    # ── РИСОВАНИЕ ЭКРАНА
+    DISPLAYSURF.fill(GRAY)
+
+    P1.draw(DISPLAYSURF)  # игрок
+    E1.draw(DISPLAYSURF)  # враг
+    C1.draw(DISPLAYSURF)  # монета
+
+    # ── ТЕКСТ НА ЭКРАНЕ (СЧЁТ / МОНЕТЫ)
+    score_text = font.render(f"Score: {score}", True, WHITE)
+    coin_text = font.render(f"Coins: {coins_collected}", True, WHITE)
+
+    DISPLAYSURF.blit(score_text, (20, 20))
+    DISPLAYSURF.blit(coin_text, (SCREEN_WIDTH - 200, 20))
+
+    # ── ОБНОВЛЕНИЕ ЭКРАНА
+    pygame.display.update()
+    FramePerSec.tick(FPS)
